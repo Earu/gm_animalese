@@ -186,7 +186,7 @@ local function init_animalese()
 	html:SetVerticalScrollbarEnabled(false)
 
 	if not file.Exists("animalese.wav", "DATA") or not file.Exists("animalese_html.txt", "DATA") then
-		http.Fetch("https://raw.githubusercontent.com/SaltyQuetzals/Manila-Animalese/master/animalese.wav", function(body)
+		http.Fetch("https://raw.githubusercontent.com/Earu/gm_animalese/main/external/animalese.wav", function(body)
 			file.Write("animalese.wav", body)
 			file.Write("animalese_html.txt", ("<html><body><script>%s</script></body></html>"):format(JAVASCRIPT))
 
