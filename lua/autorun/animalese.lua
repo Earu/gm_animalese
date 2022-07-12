@@ -253,7 +253,6 @@ local ANIM_ALL_MSG = CreateConVar("animalese_all_msgs", "0", FCVAR_ARCHIVE, "Ena
 
 local function should_play(text)
 	if not ANIM_ENABLE:GetBool() then return false end
-	if not system.HasFocus() then return false end
 	if ANIM_ALL_MSG:GetBool() then return true end
 
 	return text:StartWith("]]")
@@ -262,22 +261,58 @@ end
 local function play_animalese(ply, text)
 	if not should_play(text) then return false end
 
-	local dist = ply:EyePos():Distance(LocalPlayer():EyePos())
-	local volume = math.max(0, GetConVar("volume"):GetFloat() * (1 - dist / ANIM_DISTANCE:GetInt()))
-	text_input, pitch_input, volume_input = sanitize_text(text), compute_ply_pitch(ply), volume
-	html:RunJavascript(([[
-		if (window.IsCEFBranch) {
-			animalese.GetInput(window.PlayAnimalese);
-		} else {
-			window.PlayAnimalese(%q, %f, %f);
-		}
-	]]):format(text_input, pitch_input, volume_input))
+	local focus_cvar = GetConVar("snd_mute_losefocus")
+	if (focus_cvar:GetBool() and system.HasFocus()) or not focus_cvar:GetBool() then
+		local dist = ply:EyePos():Distance(LocalPlayer():EyePos())
+		local volume = math.max(0, GetConVar("volume"):GetFloat() * (1 - dist / ANIM_DISTANCE:GetInt()))
+		text_input, pitch_input, volume_input = sanitize_text(text), compute_ply_pitch(ply), volume
+		html:RunJavascript(([[
+			if (window.IsCEFBranch) {
+				animalese.GetInput(window.PlayAnimalese);
+			} else {
+				window.PlayAnimalese(%q, %f, %f);
+			}
+		]]):format(text_input, pitch_input, volume_input))
+	end
 
 	return true
 end
 
 local ANIMALESE_COLOR = Color(255, 95, 154)
 local WHITE_COLOR = Color(255, 255, 255)
+local function display_msg(ply, text, is_team, is_dead, is_local)
+	local msg_components = {}
+	if EasyChat then
+		if is_dead then
+			EasyChat.AddDeadTag(msg_components)
+		end
+
+		if is_team then
+			EasyChat.AddTeamTag(msg_components)
+		end
+
+		if is_local then
+			EasyChat.AddLocalTag(msg_components)
+		end
+	end
+
+	table.insert(msg_components, ANIMALESE_COLOR)
+	table.insert(msg_components, "[animalese/")
+	table.insert(msg_components, WHITE_COLOR)
+	table.insert(msg_components, ply)
+	table.insert(msg_components, ANIMALESE_COLOR)
+	table.insert(msg_components, "] - " .. text:gsub("^%]%]", ""))
+
+	chat.AddText(unpack(msg_components))
+
+	if cookie.GetNumber("animalese_tutorial", 0) == 0 then
+		cookie.Set("animalese_tutorial", "1")
+		chat.AddText(ANIMALESE_COLOR, "\n===============\n", WHITE_COLOR,
+			"To speak in ", ANIMALESE_COLOR, "animalese", WHITE_COLOR, " type ", ANIMALESE_COLOR, "]]", WHITE_COLOR,
+			" followed by the text you want to speak.\n", ANIMALESE_COLOR, "===============")
+	end
+end
+
 local queue_id = 0
 hook.Add("OnPlayerChat", "animalese", function(ply, text, is_team, is_dead, is_local)
 	local available = init_animalese()
@@ -292,42 +327,13 @@ hook.Add("OnPlayerChat", "animalese", function(ply, text, is_team, is_dead, is_l
 			hook.Remove("Think", hook_name)
 		end)
 
-		return
+		display_msg(ply, text, is_team, is_dead, is_local)
+		return true
 	end
 
 	local playing = play_animalese(ply, text)
 	if playing then
-		local msg_components = {}
-		if EasyChat then
-			if is_dead then
-				EasyChat.AddDeadTag(msg_components)
-			end
-
-			if is_team then
-				EasyChat.AddTeamTag(msg_components)
-			end
-
-			if is_local then
-				EasyChat.AddLocalTag(msg_components)
-			end
-		end
-
-		table.insert(msg_components, ANIMALESE_COLOR)
-		table.insert(msg_components, "[animalese/")
-		table.insert(msg_components, WHITE_COLOR)
-		table.insert(msg_components, ply)
-		table.insert(msg_components, ANIMALESE_COLOR)
-		table.insert(msg_components, "] - " .. text:gsub("^%]%]", ""))
-
-		chat.AddText(unpack(msg_components))
-
-		if cookie.GetNumber("animalese_tutorial", 0) == 0 then
-			cookie.Set("animalese_tutorial", "1")
-			chat.AddText(ANIMALESE_COLOR, "\n===============\n", WHITE_COLOR,
-				"To speak in ", ANIMALESE_COLOR, "animalese", WHITE_COLOR, " type ", ANIMALESE_COLOR, "]]", WHITE_COLOR,
-				" followed by the text you want to speak.\n", ANIMALESE_COLOR, "===============")
-		end
-
+		display_msg(ply, text, is_team, is_dead, is_local)
 		return true
 	end
 end)
