@@ -2,6 +2,8 @@ AddCSLuaFile()
 
 if SERVER then return end
 
+local PREFIX = "<<"
+
 local JAVASCRIPT = [[
 	var SILENCE = 0;
 	var INITIAL_OFFSET = 44;
@@ -255,7 +257,7 @@ local function should_play(text)
 	if not ANIM_ENABLE:GetBool() then return false end
 	if ANIM_ALL_MSG:GetBool() then return true end
 
-	return text:StartWith("]]")
+	return text:StartWith(PREFIX)
 end
 
 local function play_animalese(ply, text)
@@ -301,14 +303,14 @@ local function display_msg(ply, text, is_team, is_dead, is_local)
 	table.insert(msg_components, WHITE_COLOR)
 	table.insert(msg_components, ply)
 	table.insert(msg_components, ANIMALESE_COLOR)
-	table.insert(msg_components, "] - " .. text:gsub("^%]%]", ""))
+	table.insert(msg_components, "] - " .. text:gsub("^" .. PREFIX:PatternSafe(), ""))
 
 	chat.AddText(unpack(msg_components))
 
 	if cookie.GetNumber("animalese_tutorial", 0) == 0 then
 		cookie.Set("animalese_tutorial", "1")
 		chat.AddText(ANIMALESE_COLOR, "\n===============\n", WHITE_COLOR,
-			"To speak in ", ANIMALESE_COLOR, "animalese", WHITE_COLOR, " type ", ANIMALESE_COLOR, "]]", WHITE_COLOR,
+			"To speak in ", ANIMALESE_COLOR, "animalese", WHITE_COLOR, " type ", ANIMALESE_COLOR, PREFIX, WHITE_COLOR,
 			" followed by the text you want to speak.\n", ANIMALESE_COLOR, "===============")
 	end
 end
