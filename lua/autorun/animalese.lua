@@ -318,7 +318,7 @@ end
 local queue_id = 0
 hook.Add("OnPlayerChat", "animalese", function(ply, text, is_team, is_dead, is_local)
 	local available = init_animalese()
-	if not available or not ready then
+	if not available or not ready and should_play(ply, text) then
 		local hook_name = ("animalese_queue_[%d]"):format(queue_id)
 		queue_id = queue_id + 1
 
