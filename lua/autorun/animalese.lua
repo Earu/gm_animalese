@@ -1,6 +1,14 @@
 AddCSLuaFile()
 
-if SERVER then return end
+if SERVER then
+	util.AddNetworkString("animalese_update_voice")
+
+	net.Receive("animalese_update_voice", function(_, player)
+		local voice = net.ReadInt(4)
+		player:SetNWInt("animalese_voice", voice)
+	end)
+	return
+end
 
 local PREFIX = "<<"
 
@@ -272,12 +280,14 @@ local function compute_ply_voice(ply)
 		hash = hash + 4
 	end
 
-	return hash
+	local specified_voice = ply:GetNWInt("animalese_voice", hash)
+	return math.Clamp(specified_voice < 0 and hash or specified_voice, 0, 7)
 end
 
 local ANIM_ENABLE = CreateConVar("animalese_enable", "1", FCVAR_ARCHIVE, "Enable/disable animalese", 0, 1)
 local ANIM_DISTANCE = CreateConVar("animalese_distance", "500", FCVAR_ARCHIVE, "Max distance where animalese can be heard", 1, 2e9)
 local ANIM_ALL_MSG = CreateConVar("animalese_all_msgs", "0", FCVAR_ARCHIVE, "Enable/disable animalese for all messages", 0, 1)
+local ANIM_VOICE = CreateConVar("animalese_voice", "-1", FCVAR_ARCHIVE, "Animalese voice. Female: 0-3; male: 4-7. Specify -1 to use default.", -1, 7)
 
 local function should_play(text)
 	if not ANIM_ENABLE:GetBool() then return false end
@@ -387,4 +397,10 @@ hook.Add("InitPostEntity", "animalese.StopSoundHack", function()
 			end
 		end
 	end)
+end)
+
+cvars.AddChangeCallback(ANIM_VOICE:GetName(), function()
+	net.Start("animalese_update_voice")
+	net.WriteInt(ANIM_VOICE:GetInt(), 4)
+	net.SendToServer()
 end)
