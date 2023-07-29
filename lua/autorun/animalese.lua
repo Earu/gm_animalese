@@ -6,16 +6,22 @@ local PREFIX = "<<"
 
 local JAVASCRIPT = [[
 	var SILENCE = 0;
-	var INITIAL_OFFSET = 44;
+	var INITIAL_OFFSET = 0;
 	var LOWEST_PITCH = 0.8;
 	var HIGHEST_PITCH = 1.2;
+	var LOWEST_VOICE = 0;
+	var HIGHEST_VOICE = 7;
 
-	var wave_file_path = "../data/animalese.wav";
-	var wav_seconds_per_letter = 0.15;
-	var out_seconds_per_letter = 0.075;
+	var wave_file_path = "../data/animalese.ogg";
+	var wav_seconds_per_letter = 1;
+	var letter_out_seconds_per_letter = 0.075;
+	var char_out_seconds_per_letter = 0.4;
 	var AudioContext = window.AudioContext || window.webkitAudioContext;
 	var audio = new AudioContext();
 	var alphabet_buffer;
+
+	var chars = "?!^";
+	var map = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + chars + "_";
 
 	function download_buffer(url, callback) {
 		var request = new XMLHttpRequest();
@@ -38,12 +44,11 @@ local JAVASCRIPT = [[
 		alphabet_buffer = buffer;
 	})
 
-	function calculate_starting_offset(char) {
+	function calculate_starting_offset(char, voice) {
 		if (alphabet_buffer === undefined) { return; }
 
-		var char_offset = char.charCodeAt(0) - 'A'.charCodeAt(0);
 		var wav_samples_per_letter = alphabet_buffer.sampleRate * wav_seconds_per_letter;
-		return wav_samples_per_letter * char_offset;
+		return voice * map.length * alphabet_buffer.sampleRate + wav_samples_per_letter * map.indexOf(char);
 	}
 
 	function fill_buffer_with_silence(buffer) {
@@ -57,27 +62,38 @@ local JAVASCRIPT = [[
 		return buffer;
 	}
 
-	function create_char_audio_buffer(char, pitch) {
+	function create_char_audio_buffer(char, pitch, voice) {
 		if (alphabet_buffer === undefined) { return; }
 
-		if (pitch < LOWEST_PITCH) {
+		if (pitch < LOWEST_PITCH || isNaN(pitch)) {
 			pitch = LOWEST_PITCH;
 		} else if (pitch > HIGHEST_PITCH) {
 			pitch = HIGHEST_PITCH;
 		}
 
-		var char_frame_count = Math.floor(alphabet_buffer.sampleRate * out_seconds_per_letter);
+		if (voice < LOWEST_VOICE || isNaN(voice)) {
+			voice = LOWEST_VOICE;
+		} else if (voice > HIGHEST_VOICE) {
+			voice = HIGHEST_VOICE;
+		}
+
+		var len = letter_out_seconds_per_letter;
+		if (chars.indexOf(char) != -1) {
+			len = char_out_seconds_per_letter;
+		}
+
+		var char_frame_count = Math.floor(alphabet_buffer.sampleRate * len);
 		var char_audio_buffer = audio.createBuffer(
 			alphabet_buffer.numberOfChannels,
 			char_frame_count,
 			alphabet_buffer.sampleRate
 		);
 
-		if (char < 'A' || char > 'Z') {
+		if (map.indexOf(char) == -1) {
 			return fill_buffer_with_silence(char_audio_buffer);
 		}
 
-		var start_offset = calculate_starting_offset(char);
+		var start_offset = calculate_starting_offset(char, voice);
 		for (var channel = 0; channel < char_audio_buffer.numberOfChannels; ++channel) {
 			var chan_buffer = char_audio_buffer.getChannelData(channel);
 			var wav_chan_arr_buffer = alphabet_buffer.getChannelData(channel);
@@ -89,13 +105,12 @@ local JAVASCRIPT = [[
 		return char_audio_buffer;
 	}
 
-	function get_char_audio(char, pitch) {
+	function get_char_audio(char, pitch, voice) {
 		if (alphabet_buffer === undefined || char > 1) { return; }
 
 		char = char.toUpperCase();
-		return create_char_audio_buffer(char, pitch);
+		return create_char_audio_buffer(char, pitch, voice);
 	}
-
 
 	function concat_audio_buffers(buffers) {
 		var min_num_of_channels = buffers
@@ -133,11 +148,11 @@ local JAVASCRIPT = [[
 
 	window.IsCEFBranch = !(Array.from === undefined);
 
-	window.PlayAnimalese = function(text, pitch, volume_level) {
+	window.PlayAnimalese = function(text, pitch, volume_level, voice) {
 		try {
 			var buffers = [];
 			for (var i = 0; i < text.length; i++) {
-				var char_buf = get_char_audio(text.charAt(i), pitch);
+				var char_buf = get_char_audio(text.charAt(i), pitch, voice);
 				if (char_buf != null) {
 					buffers.push(char_buf);
 				}
@@ -170,7 +185,7 @@ local JAVASCRIPT = [[
 ]]
 
 local html
-local text_input, pitch_input, volume_input = "", 1, 0
+local text_input, volume_input, voice = "", 0, 0
 local ready = false
 local function init_animalese()
 	if IsValid(html) then return true end
@@ -187,16 +202,16 @@ local function init_animalese()
 	html:SetPaintedManually(true)
 	html:SetVerticalScrollbarEnabled(false)
 
-	if not file.Exists("animalese.wav", "DATA") or not file.Exists("animalese_html.txt", "DATA") then
-		http.Fetch("https://raw.githubusercontent.com/Earu/gm_animalese/main/external/animalese.wav", function(body)
-			file.Write("animalese.wav", body)
+	if not file.Exists("animalese.ogg", "DATA") or not file.Exists("animalese_html.txt", "DATA") then
+		http.Fetch("https://raw.githubusercontent.com/Earu/gm_animalese/main/external/vocal.ogg", function(body)
+			file.Write("animalese.ogg", body)
 			file.Write("animalese_html.txt", ("<html><body><script>%s</script></body></html>"):format(JAVASCRIPT))
 
 			html:OpenURL("asset://garrysmod/data/animalese_html.txt")
 
 			function html:OnFinishLoadingDocument()
 				html:AddFunction("animalese", "GetInput", function()
-					return text_input, pitch_input, volume_input
+					return text_input, 1, volume_input, voice
 				end)
 				html:AddFunction("animalese", "Print", print)
 				ready = true
@@ -207,7 +222,7 @@ local function init_animalese()
 
 		function html:OnFinishLoadingDocument()
 			html:AddFunction("animalese", "GetInput", function()
-				return text_input, pitch_input, volume_input
+				return text_input, 1, volume_input, voice
 			end)
 			html:AddFunction("animalese", "Print", print)
 			ready = true
@@ -225,7 +240,7 @@ local numbers = {
 local function sanitize_text(text)
 	return text
 		:gsub("[0-9]", function(n) return numbers[tonumber(n)] or "" end)
-		:gsub("[^a-zA-Z]", " ")
+		:gsub("[^a-zA-Z!?^]", " ")
 		:JavascriptSafe()
 		:Trim()
 end
@@ -244,9 +259,20 @@ local function string_hash(text)
 	return math.fmod(counter, 4294967291) -- 2^32 - 5: Prime (and different from the prime in the loop)
 end
 
-local function compute_ply_pitch(ply)
-	local hash = string_hash(ply:SteamID()) % 40
-	return (80 + hash) / 100
+local function get_gender_from_model(model)
+	return (model:lower():find("female", 1, true)
+		or model:lower():find("alyx", 1, true))
+		and "female" or "male"
+end
+
+local function compute_ply_voice(ply)
+	local hash = string_hash(ply:SteamID()) % 4
+
+	if get_gender_from_model(ply:GetModel()) == "male" then
+		hash = hash + 4
+	end
+
+	return hash
 end
 
 local ANIM_ENABLE = CreateConVar("animalese_enable", "1", FCVAR_ARCHIVE, "Enable/disable animalese", 0, 1)
@@ -267,14 +293,15 @@ local function play_animalese(ply, text)
 	if (focus_cvar:GetBool() and system.HasFocus()) or not focus_cvar:GetBool() then
 		local dist = ply:EyePos():Distance(LocalPlayer():EyePos())
 		local volume = math.max(0, GetConVar("volume"):GetFloat() * (1 - dist / ANIM_DISTANCE:GetInt()))
-		text_input, pitch_input, volume_input = sanitize_text(text), compute_ply_pitch(ply), volume
+		text_input, volume_input, voice = sanitize_text(text), volume, compute_ply_voice(ply)
+
 		html:RunJavascript(([[
 			if (window.IsCEFBranch) {
 				animalese.GetInput(window.PlayAnimalese);
 			} else {
-				window.PlayAnimalese(%q, %f, %f);
+				window.PlayAnimalese(%q, %f, %f, %f);
 			}
-		]]):format(text_input, pitch_input, volume_input))
+		]]):format(text_input, 1, volume_input, voice))
 	end
 
 	return true
