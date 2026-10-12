@@ -215,6 +215,8 @@ local function init_animalese()
 			file.Write("animalese.ogg", body)
 			file.Write("animalese_html.txt", ("<html><body><script>%s</script></body></html>"):format(JAVASCRIPT))
 
+			if not html:IsValid() then return end
+
 			html:OpenURL("asset://garrysmod/data/animalese_html.txt")
 
 			function html:OnFinishLoadingDocument()
